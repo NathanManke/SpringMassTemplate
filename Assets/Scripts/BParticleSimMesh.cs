@@ -46,7 +46,7 @@ public class BParticleSimMesh : MonoBehaviour
     public float defaultSpringKS = 100.0f;      // default spring coefficient with default 100
     public float defaultSpringKD = 1.0f;        // default spring daming coefficient with default 1
 
-    public bool debugRender = false;            // To render or not to render
+    public bool debugRender = true;            // To render or not to render
 
 
     /*** 
@@ -63,6 +63,16 @@ public class BParticleSimMesh : MonoBehaviour
      * - the plane (BPlane)
      ***/
 
+    public Transform groundPlane;
+    public bool handlePlaneCollisions;
+    public float mass;
+    public bool useGravity;
+    public Vector3 gravity;
+
+
+    private Mesh mesh;
+    private BParticle[] particles;
+    private BPlane bPlane;
 
 
     /// <summary>
@@ -79,9 +89,64 @@ public class BParticleSimMesh : MonoBehaviour
     ///         on initialization. Then when updating you need to remember a particular trick about the spring forces
     ///         generated between particles. 
     /// </summary>
-    void Start()
-    {
 
+    void InitParticles()
+    {
+        List<Vector3> vertices = new List<Vector3>();
+        mesh.GetVertices(vertices);
+        int numVertices = vertices.Count;
+        particles = new BParticle[numVertices];
+
+        // Initialize particles for each vertex
+        for (int i = 0; i < numVertices; i++)
+        {
+            BParticle curPart = new BParticle 
+            { 
+                position = vertices[i],
+                velocity = Vector3.zero,
+                mass = mass,
+                contactSpring = {},
+                attachedToContact = false,
+                attachedSprings = new List<BSpring>(),
+                currentForces = Vector3.zero
+            };
+            particles[i] = curPart;
+        }
+
+        // Now connect each particle with springs
+        for (int i = 0; i < particles.Length; i++)
+        {   for (int j = i + 1; j < vertices.Count; j++)
+            {
+                BSpring curSpring = new BSpring
+                {
+                    kd = defaultSpringKD,
+                    ks = defaultSpringKS,
+                    restLength = Vector3.Distance(particles[i].position, particles[j].position),
+                    attachedParticle = j
+                };
+                particles[i].attachedSprings.Add(curSpring);
+            }
+        }
+    }
+
+    void InitPlane()
+    {
+        /*
+        Get the groundplane
+        create relevant bplane
+        calculate normal
+        - by default, it faces Y direction
+        - so apply rotation to <0, 1, 0>
+        - or can it be accessed from the transform itself?
+        */
+
+    }
+
+    public void Start()
+    {
+        mesh = GetComponent<MeshFilter>().mesh;
+        InitParticles();
+        InitPlane();
     }
 
 
@@ -101,7 +166,7 @@ public class BParticleSimMesh : MonoBehaviour
     /// </summary>
     public void Update()
     {
-        /* This will work if you have a correctly made particles array
+        /* This will work if you have a correctly made particles array */
         if (debugRender)
         {
             int particleCount = particles.Length;
@@ -116,6 +181,73 @@ public class BParticleSimMesh : MonoBehaviour
                 }
             }
         }
-        */
+        
+    }
+
+    // Return the force to apply to the local particle from the particle-particle spring
+    Vector3 GetParticleSpringForce(BSpring spring, BParticle local)
+    {
+        // Refer to fancy calculation 
+        return Vector3.zero;
+    }
+
+    // Return the force to apply to the local particle from the particle-ground spring
+    Vector3 GetContactSpringForce(BContactSpring spring, BParticle local)
+    {
+        // Refer to fancy calculation 
+        return Vector3.zero;
+    }
+
+    // Reset forces.. also set them again :)
+    void ResetParticleForces()
+    {
+        for (int i = 0; i < particles.Length; i++)
+        {
+            BParticle p = particles[i];
+            p.currentForces = gravity;
+        }
+
+    }
+
+    // Maybe dont need a separate function for this if its simple
+    void UpdateParticleForces()
+    {
+
+    }
+
+    // Update the velocity and position
+    // vi = v0 + dt * F(x0, v0, t0)/mi
+    // xi = x0 + dt * vi
+    void SymplecticEulerUpdate()
+    {
+        int particleCount = particles.Length;
+        float dt = Time.fixedDeltaTime;
+        for (int i = 0; i < particleCount; i++)
+        {
+            BParticle p = particles[i];
+            p.velocity += dt * p.currentForces / p.mass;
+            p.position += dt * p.velocity;
+            particles[i] = p;
+        }
+    }
+
+
+    // Update the mesh with particle info
+    void UpdateMesh()
+    {
+        List<Vector3> newVerts = new List<Vector3>();
+        for (int i = 0; i < particles.Length; i++)
+        {
+            // Local coordinates.. is this okay?
+            newVerts[i] =  particles[i].position;
+        }
+        mesh.SetVertices(newVerts);
+    }
+
+    private void FixedUpdate() 
+    {
+        ResetParticleForces();
+        SymplecticEulerUpdate();
+        UpdateMesh();
     }
 }
