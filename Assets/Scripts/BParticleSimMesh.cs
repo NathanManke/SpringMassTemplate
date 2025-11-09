@@ -102,7 +102,7 @@ public class BParticleSimMesh : MonoBehaviour
         {
             BParticle curPart = new BParticle 
             { 
-                position = vertices[i],
+                position = transform.TransformPoint(vertices[i]),
                 velocity = Vector3.zero,
                 mass = mass,
                 contactSpring = {},
@@ -205,6 +205,10 @@ public class BParticleSimMesh : MonoBehaviour
         {
             BParticle p = particles[i];
             p.currentForces = gravity;
+            /*
+            For each spring, calculate force, then apply to self and other
+            */
+            particles[i] = p;
         }
 
     }
@@ -218,10 +222,9 @@ public class BParticleSimMesh : MonoBehaviour
     // Update the velocity and position
     // vi = v0 + dt * F(x0, v0, t0)/mi
     // xi = x0 + dt * vi
-    void SymplecticEulerUpdate()
+    void SymplecticEulerUpdate(float dt)
     {
         int particleCount = particles.Length;
-        float dt = Time.fixedDeltaTime;
         for (int i = 0; i < particleCount; i++)
         {
             BParticle p = particles[i];
@@ -238,16 +241,17 @@ public class BParticleSimMesh : MonoBehaviour
         List<Vector3> newVerts = new List<Vector3>();
         for (int i = 0; i < particles.Length; i++)
         {
-            // Local coordinates.. is this okay?
-            newVerts[i] =  particles[i].position;
+            // Local coordinates.. is this okay? nop
+            newVerts.Add(transform.InverseTransformPoint(particles[i].position));
         }
         mesh.SetVertices(newVerts);
+
     }
 
-    private void FixedUpdate() 
+    void FixedUpdate() 
     {
         ResetParticleForces();
-        SymplecticEulerUpdate();
+        SymplecticEulerUpdate(Time.fixedDeltaTime);
         UpdateMesh();
     }
 }
