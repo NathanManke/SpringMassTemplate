@@ -43,8 +43,8 @@ public class BParticleSimMesh : MonoBehaviour
     public float contactSpringKS = 1000.0f;     // contact spring coefficient with default 1000
     public float contactSpringKD = 20.0f;       // contact spring daming coefficient with default 20
 
-    public float defaultSpringKS = 100.0f;      // default spring coefficient with default 100
-    public float defaultSpringKD = 1.0f;        // default spring daming coefficient with default 1
+    public float defaultSpringKS = 1000.0f;      // default spring coefficient with default 100
+    public float defaultSpringKD = 20.0f;        // default spring daming coefficient with default 1
 
     public bool debugRender = true;            // To render or not to render
 
@@ -115,7 +115,7 @@ public class BParticleSimMesh : MonoBehaviour
 
         // Now connect each particle with springs
         for (int i = 0; i < particles.Length; i++)
-        {   for (int j = i + 1; j < vertices.Count; j++)
+        {   for (int j = i + 1; j < particles.Length; j++)
             {
                 BSpring curSpring = new BSpring
                 {
@@ -182,12 +182,15 @@ public class BParticleSimMesh : MonoBehaviour
         for (int i = 0; i < particleCount; i++)
         {
             BParticle p = particles[i];
-            if (Vector3.Dot(p.position - bPlane.position, bPlane.normal) <= 0 && !p.attachedToContact)
+            if (Vector3.Dot(p.position - bPlane.position, bPlane.normal) <= 0)
             {
+                if (!p.attachedToContact)
+                {
                 // Find attach point via projection to plane
                 Vector3 projection = p.position - Vector3.Dot(p.position - bPlane.position, bPlane.normal) * bPlane.normal;
                 p.contactSpring.attachPoint = projection;
                 p.attachedToContact = true;
+                }
             }
             else 
             {
@@ -216,7 +219,7 @@ public class BParticleSimMesh : MonoBehaviour
     {
         // Refer to fancy calculation 
         Vector3 contact = Vector3.Dot(local.position - spring.attachPoint, bPlane.normal) * bPlane.normal;
-        return -spring.ks * contact - spring.kd * local.velocity;
+        return -spring.ks * contact - spring.kd * local.velocity ;
     }
 
     // Reset forces.. also set them again :)
@@ -224,6 +227,7 @@ public class BParticleSimMesh : MonoBehaviour
     {
         for (int i = 0; i < particles.Length; i++)
         { particles[i].currentForces = gravity; }
+        //{ particles[i].currentForces = Vector3.zero; }
 
         for (int i = 0; i < particles.Length; i++)
         {
@@ -245,7 +249,6 @@ public class BParticleSimMesh : MonoBehaviour
             }
             particles[i] = p;
         }
-
     }
 
     // Update the velocity and position
@@ -272,15 +275,14 @@ public class BParticleSimMesh : MonoBehaviour
             newVerts.Add(transform.InverseTransformPoint(particles[i].position));
         }
         mesh.SetVertices(newVerts);
-        //mesh.RecalculateNormals();
-        //mesh.RecalculateBounds();
+        mesh.RecalculateNormals();
     }
 
     void FixedUpdate() 
     {
-        SetContactSprings();
-        ResetParticleForces();
         SymplecticEulerUpdate(Time.fixedDeltaTime);
         UpdateMesh();
+        SetContactSprings();
+        ResetParticleForces();
     }
 }
