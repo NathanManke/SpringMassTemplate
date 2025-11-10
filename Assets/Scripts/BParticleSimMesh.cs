@@ -105,7 +105,7 @@ public class BParticleSimMesh : MonoBehaviour
                 position = transform.TransformPoint(vertices[i]),
                 velocity = Vector3.zero,
                 mass = mass,
-                contactSpring = {},
+                contactSpring = { ks = contactSpringKS, kd = contactSpringKD, restLength = 0, attachPoint = Vector3.zero },
                 attachedToContact = false,
                 attachedSprings = new List<BSpring>(),
                 currentForces = Vector3.zero
@@ -131,15 +131,7 @@ public class BParticleSimMesh : MonoBehaviour
 
     void InitPlane()
     {
-        /*
-        Get the groundplane
-        create relevant bplane
-        calculate normal
-        - by default, it faces Y direction
-        - so apply rotation to <0, 1, 0>
-        - or can it be accessed from the transform itself?
-        */
-
+        bPlane = new BPlane { position = groundPlane.transform.position, normal = groundPlane.transform.up };
     }
 
     public void Start()
@@ -181,41 +173,78 @@ public class BParticleSimMesh : MonoBehaviour
                 }
             }
         }
-        
+    }
+
+
+    void SetContactSprings()
+    {
+        int particleCount = particles.Length;
+        for (int i = 0; i < particleCount; i++)
+        {
+            BParticle p = particles[i];
+            if (Vector3.Dot(p.position - bPlane.position, bPlane.normal) <= 0 && !p.attachedToContact)
+            {
+                // Find attach point via projection to plane
+                Vector3 projection = p.position - Vector3.Dot(p.position - bPlane.position, bPlane.normal) * bPlane.normal;
+                p.contactSpring.attachPoint = projection;
+                p.attachedToContact = true;
+            }
+            else 
+            {
+                p.attachedToContact = false;
+            }
+            particles[i] = p;
+        }
     }
 
     // Return the force to apply to the local particle from the particle-particle spring
     Vector3 GetParticleSpringForce(BSpring spring, BParticle local)
     {
-        // Refer to fancy calculation 
-        return Vector3.zero;
+        // Refer to fancy calculation...
+        BParticle other = particles[spring.attachedParticle];
+        Vector3 posDiff = local.position - other.position;      if (posDiff == Vector3.zero) { return Vector3.zero; }
+        Vector3 velDiff = local.velocity - other.velocity;
+        Vector3 posDNml = posDiff / posDiff.magnitude;
+
+        Vector3 contact = (spring.restLength - posDiff.magnitude) * posDNml;
+        Vector3 damp    = Vector3.Dot(velDiff, posDNml) * posDNml;
+        return spring.ks * contact - spring.kd * damp;
     }
 
     // Return the force to apply to the local particle from the particle-ground spring
     Vector3 GetContactSpringForce(BContactSpring spring, BParticle local)
     {
         // Refer to fancy calculation 
-        return Vector3.zero;
+        Vector3 contact = Vector3.Dot(local.position - spring.attachPoint, bPlane.normal) * bPlane.normal;
+        return -spring.ks * contact - spring.kd * local.velocity;
     }
 
     // Reset forces.. also set them again :)
     void ResetParticleForces()
     {
         for (int i = 0; i < particles.Length; i++)
+        { particles[i].currentForces = gravity; }
+
+        for (int i = 0; i < particles.Length; i++)
         {
             BParticle p = particles[i];
-            p.currentForces = gravity;
-            /*
-            For each spring, calculate force, then apply to self and other
-            */
+
+            // Calculate p-p spring force, then apply appropriately to each particle
+            for (int j = 0; j < p.attachedSprings.Count; j++)
+            {
+                BSpring spring = p.attachedSprings[j];
+                Vector3 f = GetParticleSpringForce(spring, p);
+                p.currentForces += f;
+                particles[spring.attachedParticle].currentForces -= f;
+            }
+
+            // Do contact spring stuff if needed
+            if (p.attachedToContact)
+            {
+                p.currentForces += GetContactSpringForce(p.contactSpring, p);
+            }
             particles[i] = p;
         }
-
-    }
-
-    // Maybe dont need a separate function for this if its simple
-    void UpdateParticleForces()
-    {
 
     }
 
@@ -234,22 +263,22 @@ public class BParticleSimMesh : MonoBehaviour
         }
     }
 
-
     // Update the mesh with particle info
     void UpdateMesh()
     {
         List<Vector3> newVerts = new List<Vector3>();
         for (int i = 0; i < particles.Length; i++)
         {
-            // Local coordinates.. is this okay? nop
             newVerts.Add(transform.InverseTransformPoint(particles[i].position));
         }
         mesh.SetVertices(newVerts);
-
+        //mesh.RecalculateNormals();
+        //mesh.RecalculateBounds();
     }
 
     void FixedUpdate() 
     {
+        SetContactSprings();
         ResetParticleForces();
         SymplecticEulerUpdate(Time.fixedDeltaTime);
         UpdateMesh();
